@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import '../styles/login.css';
 
 function Register() {
@@ -15,7 +16,7 @@ function Register() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordConfirmError, setPasswordConfirmError] = useState('');
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     setNameError('');
@@ -53,27 +54,33 @@ function Register() {
 
     if (!valid) return;
 
-    const users = JSON.parse(localStorage.getItem('users')) || [];
-    const emailValue = email.trim().toLowerCase();
+    try {
+      const response = await fetch(`${API_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password: password.trim(),
+        }),
+      });
 
-    const existingUser = users.find((user) => user.email === emailValue);
+      const data = await response.json();
 
-    if (existingUser) {
-      setEmailError('Ya existe una cuenta con este correo');
-      return;
+      if (!response.ok) {
+        setEmailError(data.message || 'No se ha podido crear la cuenta');
+        return;
+      }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('currentUser', JSON.stringify(data.user));
+
+      navigate('/dashboard');
+    } catch (error) {
+      setEmailError('No se ha podido conectar con el servidor');
     }
-
-    const newUser = {
-      id: Date.now(),
-      name: name.trim(),
-      email: emailValue,
-      password: password.trim(),
-    };
-
-    users.push(newUser);
-    localStorage.setItem('users', JSON.stringify(users));
-
-    navigate('/login');
   }
 
   return (

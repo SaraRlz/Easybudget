@@ -42,6 +42,7 @@ function Perfil() {
 
   function handleLogout() {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('token');
     navigate('/login');
   }
 

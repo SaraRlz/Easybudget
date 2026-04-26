@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import '../styles/login.css';
 
 function Login() {
@@ -11,7 +12,7 @@ function Login() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     setEmailError('');
@@ -31,29 +32,32 @@ function Login() {
 
     if (!valid) return;
 
-    const emailValue = email.trim().toLowerCase();
-    const passwordValue = password.trim();
+    try {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password: password.trim(),
+        }),
+      });
 
-    const users = JSON.parse(localStorage.getItem('users')) || [];
+      const data = await response.json();
 
-    const userFound = users.find(
-      (user) => user.email?.trim().toLowerCase() === emailValue && user.password?.trim() === passwordValue,
-    );
-    if (!userFound) {
-      setPasswordError('Correo o contraseña incorrectos');
-      return;
+      if (!response.ok) {
+        setPasswordError(data.message || 'Correo o contraseña incorrectos');
+        return;
+      }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('currentUser', JSON.stringify(data.user));
+
+      navigate('/dashboard');
+    } catch (error) {
+      setPasswordError('No se ha podido conectar con el servidor');
     }
-
-    localStorage.setItem(
-      'currentUser',
-      JSON.stringify({
-        id: userFound.id,
-        name: userFound.name,
-        email: userFound.email,
-      }),
-    );
-
-    navigate('/dashboard');
   }
 
   return (
