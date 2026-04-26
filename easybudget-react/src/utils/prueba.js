@@ -1,18 +1,16 @@
-// ===== DATOS PARA PRUEBA =====
-document.addEventListener('DOMContentLoaded', function () {
-  const users = JSON.parse(localStorage.getItem('users'));
+export function initDemoData() {
+  const users = JSON.parse(localStorage.getItem('users')) || [];
 
-  if (!users || users.length === 0) {
-    const demoUser = [
-      {
-        id: 1,
-        name: 'Prueba',
-        email: 'prueba@test.com',
-        password: '123456',
-      },
-    ];
+  const demoExists = users.some((user) => user.email === 'prueba@test.com');
 
-    localStorage.setItem('users', JSON.stringify(demoUser));
-    console.log('Usuario de prueba creado');
+  if (!demoExists) {
+    users.push({
+      id: 1,
+      name: 'Prueba',
+      email: 'prueba@test.com',
+      password: '123456',
+    });
+
+    localStorage.setItem('users', JSON.stringify(users));
   }
-});
+}
