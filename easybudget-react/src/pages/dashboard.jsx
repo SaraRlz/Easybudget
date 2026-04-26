@@ -30,37 +30,49 @@ ChartJS.register(
 
 function Dashboard() {
   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  const [movements, setMovements] = useState([]);
 
-  const budgets = JSON.parse(localStorage.getItem('budgets')) || [];
+  const [movements, setMovements] = useState([]);
+  const [budgets, setBudgets] = useState([]);
 
   useEffect(() => {
-    async function fetchMovements() {
+    async function fetchDashboardData() {
       try {
         const token = localStorage.getItem('token');
 
-        const response = await fetch(`${API_URL}/api/movements`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const [movementsResponse, budgetsResponse] = await Promise.all([
+          fetch(`${API_URL}/api/movements`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+          fetch(`${API_URL}/api/budgets`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+        ]);
 
-        const data = await response.json();
+        const movementsData = await movementsResponse.json();
+        const budgetsData = await budgetsResponse.json();
 
-        if (response.ok) {
-          setMovements(data);
+        if (movementsResponse.ok) {
+          setMovements(movementsData);
+        }
+
+        if (budgetsResponse.ok) {
+          setBudgets(budgetsData);
         }
       } catch (error) {
-        console.error('Error cargando movimientos:', error);
+        console.error('Error cargando datos del dashboard:', error);
       }
     }
 
-    fetchMovements();
+    fetchDashboardData();
   }, []);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
 
-  const userMovements = movements;
+  const userMovements = movements.filter((m) => !m.userId || m.userId === currentUser?.id);
   const monthMovements = userMovements.filter((m) => m.date?.startsWith(currentMonth));
 
   const income = monthMovements.filter((m) => m.type === 'income').reduce((sum, m) => sum + Number(m.amount), 0);
@@ -76,7 +88,7 @@ function Dashboard() {
 
   const totalBalance = totalIncome - totalExpenses;
 
-  const userBudgets = budgets.filter((b) => b.userId === currentUser?.id && b.month === currentMonth);
+  const userBudgets = budgets.filter((b) => (!b.userId || b.userId === currentUser?.id) && b.month === currentMonth);
 
   function getSpentByCategory(category) {
     return monthMovements
@@ -87,7 +99,7 @@ function Dashboard() {
   const alerts = userBudgets
     .map((budget) => {
       const spent = getSpentByCategory(budget.category);
-      const percentage = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
+      const percentage = Number(budget.limit) > 0 ? (spent / Number(budget.limit)) * 100 : 0;
 
       if (percentage > 100) {
         return {
@@ -109,7 +121,7 @@ function Dashboard() {
     })
     .filter(Boolean);
 
-  const categories = ['Vivienda', 'Comida', 'Transporte', 'Ocio', 'Salud', 'Compra', 'Otros'];
+  const categories = ['Vivienda', 'Comida', 'Transporte', 'Ocio', 'Salud', 'Otros'];
 
   const categoryTotals = categories.map((category) => ({
     category,
@@ -424,7 +436,7 @@ function Dashboard() {
           ) : (
             userBudgets.slice(0, 3).map((budget) => {
               const spent = getSpentByCategory(budget.category);
-              const percentage = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
+              const percentage = Number(budget.limit) > 0 ? (spent / Number(budget.limit)) * 100 : 0;
 
               let barClass = 'primary-bar';
               if (percentage > 100) barClass = 'danger-bar';

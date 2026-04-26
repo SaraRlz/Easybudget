@@ -6,12 +6,12 @@ function Toast({ message, type = 'warning', onClose }) {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setClosing(true); // empieza fade-out
-    }, 1800); // visible 1.8s
+      setClosing(true);
+    }, 1800);
 
     const removeTimer = setTimeout(() => {
-      onClose(); // se elimina después del fade
-    }, 2300); // total duración
+      onClose();
+    }, 2300);
 
     return () => {
       clearTimeout(timer);

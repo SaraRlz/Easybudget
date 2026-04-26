@@ -1,17 +1,59 @@
+import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import { API_URL } from '../config/api';
 import '../styles/alertas.css';
 
 function Alertas() {
   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  const movements = JSON.parse(localStorage.getItem('movements')) || [];
-  const budgets = JSON.parse(localStorage.getItem('budgets')) || [];
+
+  const [movements, setMovements] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
 
-  const userMovements = movements.filter((m) => m.userId === currentUser?.id);
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const token = localStorage.getItem('token');
+
+        const [movementsResponse, budgetsResponse] = await Promise.all([
+          fetch(`${API_URL}/api/movements`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+          fetch(`${API_URL}/api/budgets`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+        ]);
+
+        const movementsData = await movementsResponse.json();
+        const budgetsData = await budgetsResponse.json();
+
+        if (movementsResponse.ok) {
+          setMovements(movementsData);
+        }
+
+        if (budgetsResponse.ok) {
+          setBudgets(budgetsData);
+        }
+      } catch (error) {
+        console.error('Error cargando alertas:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  const userMovements = movements.filter((m) => !m.userId || m.userId === currentUser?.id);
   const monthMovements = userMovements.filter((m) => m.type === 'expense' && m.date?.startsWith(currentMonth));
 
-  const userBudgets = budgets.filter((b) => b.userId === currentUser?.id && b.month === currentMonth);
+  const userBudgets = budgets.filter((b) => (!b.userId || b.userId === currentUser?.id) && b.month === currentMonth);
 
   function getSpentByCategory(category) {
     return monthMovements.filter((m) => m.category === category).reduce((sum, m) => sum + Number(m.amount), 0);
@@ -20,14 +62,16 @@ function Alertas() {
   const alerts = userBudgets
     .map((budget) => {
       const spent = getSpentByCategory(budget.category);
-      const percentage = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
+      const percentage = Number(budget.limit) > 0 ? (spent / Number(budget.limit)) * 100 : 0;
 
       if (percentage > 100) {
         return {
           type: 'danger',
           level: 'Nivel alto',
           title: `${budget.category} ha superado el presupuesto`,
-          message: `Has gastado ${spent.toFixed(2)} € de ${Number(budget.limit).toFixed(2)} €. Se recomienda reducir nuevos gastos en esta categoría.`,
+          message: `Has gastado ${spent.toFixed(2)} € de ${Number(budget.limit).toFixed(
+            2,
+          )} €. Se recomienda reducir nuevos gastos en esta categoría.`,
         };
       }
 
@@ -36,7 +80,9 @@ function Alertas() {
           type: 'warning',
           level: 'Nivel medio',
           title: `${budget.category} está cerca del límite`,
-          message: `Has consumido el ${percentage.toFixed(0)}% del presupuesto mensual. Conviene controlar los próximos gastos.`,
+          message: `Has consumido el ${percentage.toFixed(
+            0,
+          )}% del presupuesto mensual. Conviene controlar los próximos gastos.`,
         };
       }
 
@@ -101,7 +147,13 @@ function Alertas() {
       </section>
 
       <section className="alerts-list">
-        {alerts.length === 0 ? (
+        {loading ? (
+          <article className="alert-card info">
+            <h3>Cargando alertas...</h3>
+            <p>Consultando movimientos y presupuestos desde la API.</p>
+            <span className="tag">Información</span>
+          </article>
+        ) : alerts.length === 0 ? (
           <article className="alert-card info">
             <h3>Todo bajo control</h3>
             <p>No hay alertas activas. Tus gastos se mantienen dentro de los presupuestos definidos.</p>
