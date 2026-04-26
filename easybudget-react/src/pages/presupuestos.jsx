@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import { API_URL } from '../config/api';
 import '../styles/presupuestos.css';
 
 function Presupuestos() {
   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-
   const currentMonth = new Date().toISOString().slice(0, 7);
 
   const [budgets, setBudgets] = useState(JSON.parse(localStorage.getItem('budgets')) || []);
-
-  const [movements] = useState(JSON.parse(localStorage.getItem('movements')) || []);
+  const [movements, setMovements] = useState([]);
 
   const [month, setMonth] = useState(currentMonth);
   const [category, setCategory] = useState('');
@@ -17,11 +16,34 @@ function Presupuestos() {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    async function fetchMovements() {
+      try {
+        const token = localStorage.getItem('token');
+
+        const response = await fetch(`${API_URL}/api/movements`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setMovements(data);
+        }
+      } catch (error) {
+        console.error('Error cargando movimientos:', error);
+      }
+    }
+
+    fetchMovements();
+  }, []);
+
   const userBudgets = budgets.filter((budget) => budget.userId === currentUser?.id && budget.month === month);
 
   const monthMovements = movements.filter(
-    (movement) =>
-      movement.userId === currentUser?.id && movement.type === 'expense' && movement.date?.startsWith(month),
+    (movement) => movement.type === 'expense' && movement.date?.startsWith(month),
   );
 
   function getSpentByCategory(categoryName) {
@@ -31,9 +53,7 @@ function Presupuestos() {
   }
 
   const totalBudget = userBudgets.reduce((sum, budget) => sum + Number(budget.limit), 0);
-
   const totalSpent = userBudgets.reduce((sum, budget) => sum + getSpentByCategory(budget.category), 0);
-
   const totalRemaining = totalBudget - totalSpent;
 
   useEffect(() => {
@@ -95,7 +115,7 @@ function Presupuestos() {
     }
 
     const newBudget = {
-      id: Date.now(),
+      id: crypto.randomUUID(),
       userId: currentUser.id,
       month,
       category,
