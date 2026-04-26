@@ -18,35 +18,35 @@ function Compra() {
   const total = products.reduce((sum, product) => sum + Number(product.price), 0);
 
   useEffect(() => {
-    loadMovement();
-  }, [date]);
+    async function loadMovement() {
+      try {
+        const response = await fetch(`${API_URL}/api/movements`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-  async function loadMovement() {
-    try {
-      const response = await fetch(`${API_URL}/api/movements`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+        const data = await response.json();
 
-      const data = await response.json();
+        if (!response.ok) return;
 
-      if (!response.ok) return;
+        const movement = data.find((m) => m.isShoppingMovement && m.date === date);
 
-      const movement = data.find((m) => m.isShoppingMovement && m.date === date && m.userId === currentUser.id);
+        if (!movement) {
+          setProducts([]);
+          setMovementId(null);
+          return;
+        }
 
-      if (!movement) {
-        setProducts([]);
-        setMovementId(null);
-        return;
+        setProducts(movement.products || []);
+        setMovementId(movement.id);
+      } catch (error) {
+        console.error('Error cargando compra:', error);
       }
-
-      setProducts(movement.products || []);
-      setMovementId(movement.id);
-    } catch (error) {
-      console.error('Error cargando compra:', error);
     }
-  }
+
+    loadMovement();
+  }, [date, token]);
 
   function formatDateSpanish(date) {
     const d = new Date(date);
@@ -67,8 +67,8 @@ function Compra() {
         },
       });
 
-      setMovementId(null);
       setProducts([]);
+      setMovementId(null);
       return;
     }
 
@@ -81,8 +81,8 @@ function Compra() {
       isRecurring: false,
       recurringDay: null,
       recurringParentId: null,
-      createdAutomatically: true,
       isShoppingMovement: true,
+      createdAutomatically: true,
       products: updatedProducts,
     };
 
@@ -99,12 +99,12 @@ function Compra() {
       const data = await response.json();
 
       if (!response.ok) {
-        alert('Error sincronizando compra');
+        alert(data.message || 'Error sincronizando compra');
         return;
       }
 
-      setMovementId(data.id || movementId);
-      setProducts(updatedProducts);
+      setMovementId(data.id);
+      setProducts(data.products || updatedProducts);
     } catch (error) {
       console.error(error);
       alert('Error conectando con el servidor');
@@ -125,16 +125,14 @@ function Compra() {
       price: Number(productPrice),
     };
 
-    const updatedProducts = [...products, newProduct];
-
-    syncMovement(updatedProducts);
+    syncMovement([...products, newProduct]);
 
     setProductName('');
     setProductPrice('');
   }
 
   function handleDeleteProduct(productId) {
-    const updatedProducts = products.filter((p) => p.id !== productId);
+    const updatedProducts = products.filter((product) => product.id !== productId);
     syncMovement(updatedProducts);
   }
 
@@ -143,7 +141,7 @@ function Compra() {
       <header className="main-header">
         <div>
           <h1>Compra</h1>
-          <p>Añade productos y genera automáticamente un gasto.</p>
+          <p>Añade productos de la compra y genera automáticamente un movimiento de comida.</p>
         </div>
       </header>
 
@@ -164,45 +162,79 @@ function Compra() {
       <section className="shopping-grid">
         <article className="card shopping-form-card">
           <div className="card-header">
-            <h2>Nueva compra</h2>
+            <div>
+              <h2>Nueva compra</h2>
+              <p>Selecciona el día y añade productos.</p>
+            </div>
           </div>
 
-          <form onSubmit={handleAddProduct}>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            <input
-              type="text"
-              placeholder="Producto"
-              value={productName}
-              onChange={(e) => setProductName(e.target.value)}
-            />
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Precio"
-              value={productPrice}
-              onChange={(e) => setProductPrice(e.target.value)}
-            />
+          <form className="shopping-form" onSubmit={handleAddProduct}>
+            <div className="form-group">
+              <label htmlFor="date">Fecha de compra</label>
+              <input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
 
-            <button type="submit">Añadir</button>
+            <div className="form-group">
+              <label htmlFor="productName">Producto</label>
+              <input
+                id="productName"
+                type="text"
+                placeholder="Ej. leche"
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="productPrice">Precio</label>
+              <input
+                id="productPrice"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={productPrice}
+                onChange={(e) => setProductPrice(e.target.value)}
+              />
+            </div>
+
+            <button type="submit" className="btn-primary">
+              Añadir producto
+            </button>
           </form>
         </article>
 
         <article className="card shopping-list-card">
-          <h2>Compra del día</h2>
+          <div className="card-header">
+            <div>
+              <h2>Compra día {new Date(date).getDate()}</h2>
+              <p>Detalle de productos añadidos.</p>
+            </div>
+          </div>
 
           {products.length === 0 ? (
-            <p>No hay productos</p>
+            <p>No hay productos añadidos para esta fecha.</p>
           ) : (
-            <div>
-              {products.map((p) => (
-                <div key={p.id}>
-                  <strong>{p.name}</strong>
-                  <span>{p.price.toFixed(2)} €</span>
-                  <button onClick={() => handleDeleteProduct(p.id)}>Eliminar</button>
+            <div className="shopping-products">
+              {products.map((product) => (
+                <div className="shopping-product" key={product.id}>
+                  <div>
+                    <strong>{product.name}</strong>
+                    <span>Producto de compra</span>
+                  </div>
+
+                  <div className="shopping-product-actions">
+                    <strong>{Number(product.price).toFixed(2)} €</strong>
+                    <button type="button" className="btn-delete" onClick={() => handleDeleteProduct(product.id)}>
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               ))}
 
-              <strong>Total: {total.toFixed(2)} €</strong>
+              <div className="shopping-total">
+                <span>Total</span>
+                <strong>{total.toFixed(2)} €</strong>
+              </div>
             </div>
           )}
         </article>

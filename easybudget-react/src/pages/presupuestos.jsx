@@ -4,10 +4,9 @@ import { API_URL } from '../config/api';
 import '../styles/presupuestos.css';
 
 function Presupuestos() {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   const currentMonth = new Date().toISOString().slice(0, 7);
 
-  const [budgets, setBudgets] = useState(JSON.parse(localStorage.getItem('budgets')) || []);
+  const [budgets, setBudgets] = useState([]);
   const [movements, setMovements] = useState([]);
 
   const [month, setMonth] = useState(currentMonth);
@@ -17,30 +16,37 @@ function Presupuestos() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    async function fetchMovements() {
-      try {
-        const token = localStorage.getItem('token');
+    fetchData();
+  }, []);
 
-        const response = await fetch(`${API_URL}/api/movements`, {
+  async function fetchData() {
+    try {
+      const token = localStorage.getItem('token');
+
+      const [budgetsResponse, movementsResponse] = await Promise.all([
+        fetch(`${API_URL}/api/budgets`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        });
+        }),
+        fetch(`${API_URL}/api/movements`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ]);
 
-        const data = await response.json();
+      const budgetsData = await budgetsResponse.json();
+      const movementsData = await movementsResponse.json();
 
-        if (response.ok) {
-          setMovements(data);
-        }
-      } catch (error) {
-        console.error('Error cargando movimientos:', error);
-      }
+      if (budgetsResponse.ok) setBudgets(budgetsData);
+      if (movementsResponse.ok) setMovements(movementsData);
+    } catch (error) {
+      console.error('Error cargando presupuestos:', error);
     }
+  }
 
-    fetchMovements();
-  }, []);
-
-  const userBudgets = budgets.filter((budget) => budget.userId === currentUser?.id && budget.month === month);
+  const userBudgets = budgets.filter((budget) => budget.month === month);
 
   const monthMovements = movements.filter(
     (movement) => movement.type === 'expense' && movement.date?.startsWith(month),
@@ -56,10 +62,6 @@ function Presupuestos() {
   const totalSpent = userBudgets.reduce((sum, budget) => sum + getSpentByCategory(budget.category), 0);
   const totalRemaining = totalBudget - totalSpent;
 
-  useEffect(() => {
-    localStorage.setItem('budgets', JSON.stringify(budgets));
-  }, [budgets]);
-
   function resetForm() {
     setCategory('');
     setLimit('');
@@ -67,7 +69,7 @@ function Presupuestos() {
     setError('');
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     setError('');
@@ -83,11 +85,7 @@ function Presupuestos() {
     }
 
     const duplicatedBudget = budgets.find(
-      (budget) =>
-        budget.userId === currentUser?.id &&
-        budget.month === month &&
-        budget.category === category &&
-        budget.id !== editingId,
+      (budget) => budget.month === month && budget.category === category && budget.id !== editingId,
     );
 
     if (duplicatedBudget) {
@@ -95,35 +93,40 @@ function Presupuestos() {
       return;
     }
 
-    if (editingId) {
-      const updatedBudgets = budgets.map((budget) => {
-        if (budget.id === editingId && budget.userId === currentUser?.id) {
-          return {
-            ...budget,
-            month,
-            category,
-            limit: Number(limit),
-          };
-        }
+    try {
+      const token = localStorage.getItem('token');
 
-        return budget;
+      const response = await fetch(editingId ? `${API_URL}/api/budgets/${editingId}` : `${API_URL}/api/budgets`, {
+        method: editingId ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          month,
+          category,
+          limit: Number(limit),
+        }),
       });
 
-      setBudgets(updatedBudgets);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || 'No se ha podido guardar el presupuesto');
+        return;
+      }
+
+      if (editingId) {
+        setBudgets(budgets.map((budget) => (budget.id === editingId ? data : budget)));
+      } else {
+        setBudgets([...budgets, data]);
+      }
+
       resetForm();
-      return;
+    } catch (error) {
+      console.error('Error guardando presupuesto:', error);
+      setError('No se ha podido conectar con el servidor');
     }
-
-    const newBudget = {
-      id: crypto.randomUUID(),
-      userId: currentUser.id,
-      month,
-      category,
-      limit: Number(limit),
-    };
-
-    setBudgets([...budgets, newBudget]);
-    resetForm();
   }
 
   function handleEdit(budget) {
@@ -134,15 +137,31 @@ function Presupuestos() {
     setError('');
   }
 
-  function handleDelete(id) {
+  async function handleDelete(id) {
     const confirmDelete = confirm('¿Seguro que quieres eliminar este presupuesto?');
     if (!confirmDelete) return;
 
-    const updatedBudgets = budgets.filter((budget) => budget.id !== id);
-    setBudgets(updatedBudgets);
+    try {
+      const token = localStorage.getItem('token');
 
-    if (editingId === id) {
-      resetForm();
+      const response = await fetch(`${API_URL}/api/budgets/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        setError('No se ha podido eliminar el presupuesto');
+        return;
+      }
+
+      setBudgets(budgets.filter((budget) => budget.id !== id));
+
+      if (editingId === id) resetForm();
+    } catch (error) {
+      console.error('Error eliminando presupuesto:', error);
+      setError('No se ha podido conectar con el servidor');
     }
   }
 
@@ -199,7 +218,6 @@ function Presupuestos() {
                 <option value="Transporte">Transporte</option>
                 <option value="Ocio">Ocio</option>
                 <option value="Salud">Salud</option>
-                <option value="Compra">Compra</option>
                 <option value="Otros">Otros</option>
               </select>
             </div>
@@ -245,7 +263,7 @@ function Presupuestos() {
           ) : (
             userBudgets.map((budget) => {
               const spent = getSpentByCategory(budget.category);
-              const percentage = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
+              const percentage = Number(budget.limit) > 0 ? (spent / Number(budget.limit)) * 100 : 0;
               const remaining = Number(budget.limit) - spent;
 
               let barClass = 'primary-bar';
