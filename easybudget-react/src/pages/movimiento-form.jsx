@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { API_URL } from '../config/api';
 import '../styles/movimiento-form.css';
 
 const incomeCategories = ['Nómina', 'Pagas', 'Ahorro', 'Ayudas', 'Venta', 'Otros'];
@@ -10,7 +11,6 @@ function MovimientoForm() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   const movementId = searchParams.get('id');
 
   const [type, setType] = useState('');
@@ -28,21 +28,37 @@ function MovimientoForm() {
   useEffect(() => {
     if (!isEditing) return;
 
-    const movements = JSON.parse(localStorage.getItem('movements')) || [];
+    async function fetchMovementToEdit() {
+      try {
+        const token = localStorage.getItem('token');
 
-    const movement = movements.find(
-      (item) => String(item.id) === String(movementId) && item.userId === currentUser?.id,
-    );
+        const response = await fetch(`${API_URL}/api/movements`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-    if (!movement) return;
+        const data = await response.json();
 
-    setType(movement.type);
-    setConcept(movement.concept);
-    setCategory(movement.category);
-    setAmount(String(movement.amount));
-    setDate(movement.date);
-    setIsRecurring(Boolean(movement.isRecurring));
-  }, [isEditing, movementId, currentUser?.id]);
+        if (!response.ok) return;
+
+        const movement = data.find((item) => String(item.id) === String(movementId));
+
+        if (!movement) return;
+
+        setType(movement.type);
+        setConcept(movement.concept);
+        setCategory(movement.category);
+        setAmount(String(movement.amount));
+        setDate(movement.date);
+        setIsRecurring(Boolean(movement.isRecurring));
+      } catch (error) {
+        console.error('Error cargando movimiento:', error);
+      }
+    }
+
+    fetchMovementToEdit();
+  }, [isEditing, movementId]);
 
   function validateForm() {
     const newErrors = {};
@@ -58,54 +74,45 @@ function MovimientoForm() {
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
 
     if (!validateForm()) return;
 
-    const movements = JSON.parse(localStorage.getItem('movements')) || [];
-
+    const token = localStorage.getItem('token');
     const recurringDay = isRecurring ? Number(date.split('-')[2]) : null;
 
-    if (isEditing) {
-      const updatedMovements = movements.map((movement) => {
-        if (String(movement.id) === String(movementId) && movement.userId === currentUser?.id) {
-          return {
-            ...movement,
-            type,
-            concept: concept.trim(),
-            category,
-            amount: Number(amount),
-            date,
-            isRecurring,
-            recurringDay,
-          };
-        }
+    const movementData = {
+      type,
+      concept: concept.trim(),
+      category,
+      amount: Number(amount),
+      date,
+      isRecurring,
+      recurringDay,
+      recurringParentId: null,
+      createdAutomatically: false,
+    };
 
-        return movement;
+    try {
+      const response = await fetch(isEditing ? `${API_URL}/api/movements/${movementId}` : `${API_URL}/api/movements`, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(movementData),
       });
 
-      localStorage.setItem('movements', JSON.stringify(updatedMovements));
-    } else {
-      const newMovement = {
-        id: crypto.randomUUID(),
-        userId: currentUser.id,
-        type,
-        concept: concept.trim(),
-        category,
-        amount: Number(amount),
-        date,
-        isRecurring,
-        recurringDay,
-        recurringParentId: null,
-        createdAutomatically: false,
-      };
+      if (!response.ok) {
+        setErrors({ general: 'No se ha podido guardar el movimiento' });
+        return;
+      }
 
-      movements.push(newMovement);
-      localStorage.setItem('movements', JSON.stringify(movements));
+      navigate('/movimientos');
+    } catch (error) {
+      setErrors({ general: 'No se ha podido conectar con el servidor' });
     }
-
-    navigate('/movimientos');
   }
 
   return (
@@ -120,6 +127,8 @@ function MovimientoForm() {
       <section className="movement-form-page">
         <article className="card movement-form-card">
           <form onSubmit={handleSubmit} noValidate>
+            {errors.general && <small className="error-message">{errors.general}</small>}
+
             <div className="form-group">
               <label htmlFor="type">Tipo</label>
               <select

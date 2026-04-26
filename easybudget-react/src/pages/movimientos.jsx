@@ -1,19 +1,41 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { API_URL } from '../config/api';
 import '../styles/movimientos.css';
 
 function Movimientos() {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-
-  const [movements, setMovements] = useState(JSON.parse(localStorage.getItem('movements')) || []);
+  const [movements, setMovements] = useState([]);
 
   const [filterType, setFilterType] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterConcept, setFilterConcept] = useState('');
 
+  useEffect(() => {
+    fetchMovements();
+  }, []);
+
+  async function fetchMovements() {
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await fetch(`${API_URL}/api/movements`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMovements(data);
+      }
+    } catch (error) {
+      console.error('Error cargando movimientos:', error);
+    }
+  }
+
   const userMovements = movements
-    .filter((movement) => movement.userId === currentUser?.id)
     .filter((movement) => {
       const matchesType = filterType ? movement.type === filterType : true;
       const matchesCategory = filterCategory ? movement.category === filterCategory : true;
@@ -35,22 +57,25 @@ function Movimientos() {
 
   const balance = totalIncome - totalExpenses;
 
-  function deleteMovement(id) {
+  async function deleteMovement(id) {
     const confirmDelete = confirm('¿Seguro que quieres eliminar este movimiento?');
     if (!confirmDelete) return;
 
-    const movementToDelete = movements.find((m) => m.id === id);
+    try {
+      const token = localStorage.getItem('token');
 
-    const updatedMovements = movements.filter((movement) => movement.id !== id);
-    setMovements(updatedMovements);
-    localStorage.setItem('movements', JSON.stringify(updatedMovements));
+      const response = await fetch(`${API_URL}/api/movements/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    if (movementToDelete?.isShoppingMovement) {
-      const shoppingLists = JSON.parse(localStorage.getItem('shoppingLists')) || [];
-
-      const updatedLists = shoppingLists.filter((list) => list.movementId !== id);
-
-      localStorage.setItem('shoppingLists', JSON.stringify(updatedLists));
+      if (response.ok) {
+        fetchMovements();
+      }
+    } catch (error) {
+      console.error('Error eliminando movimiento:', error);
     }
   }
 
