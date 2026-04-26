@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { API_URL } from '../config/api';
 import '../styles/perfil.css';
 
 function Perfil() {
@@ -10,34 +11,42 @@ function Perfil() {
   const [name, setName] = useState(currentUser?.name || '');
   const [email, setEmail] = useState(currentUser?.email || '');
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  function handleSave(e) {
+  async function handleSave(e) {
     e.preventDefault();
 
-    const users = JSON.parse(localStorage.getItem('users')) || [];
+    setMessage('');
+    setError('');
 
-    const updatedUsers = users.map((user) => {
-      if (user.id === currentUser.id) {
-        return {
-          ...user,
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await fetch(`${API_URL}/api/users/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
           name: name.trim(),
           email: email.trim().toLowerCase(),
-        };
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || 'No se ha podido actualizar el perfil');
+        return;
       }
 
-      return user;
-    });
+      localStorage.setItem('currentUser', JSON.stringify(data));
 
-    const updatedCurrentUser = {
-      ...currentUser,
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-    };
-
-    localStorage.setItem('users', JSON.stringify(updatedUsers));
-    localStorage.setItem('currentUser', JSON.stringify(updatedCurrentUser));
-
-    setMessage('Perfil actualizado correctamente');
+      setMessage('Perfil actualizado correctamente');
+    } catch (error) {
+      setError('No se ha podido conectar con el servidor');
+    }
   }
 
   function handleLogout() {
@@ -46,25 +55,32 @@ function Perfil() {
     navigate('/login');
   }
 
-  function handleDeleteAccount() {
+  async function handleDeleteAccount() {
     const confirmDelete = confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');
     if (!confirmDelete) return;
 
-    const users = JSON.parse(localStorage.getItem('users')) || [];
-    const movements = JSON.parse(localStorage.getItem('movements')) || [];
-    const budgets = JSON.parse(localStorage.getItem('budgets')) || [];
+    try {
+      const token = localStorage.getItem('token');
 
-    localStorage.setItem('users', JSON.stringify(users.filter((user) => user.id !== currentUser.id)));
+      const response = await fetch(`${API_URL}/api/users/me`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    localStorage.setItem(
-      'movements',
-      JSON.stringify(movements.filter((movement) => movement.userId !== currentUser.id)),
-    );
+      if (!response.ok) {
+        setError('No se ha podido eliminar la cuenta');
+        return;
+      }
 
-    localStorage.setItem('budgets', JSON.stringify(budgets.filter((budget) => budget.userId !== currentUser.id)));
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('token');
 
-    localStorage.removeItem('currentUser');
-    navigate('/login');
+      navigate('/login');
+    } catch (error) {
+      setError('No se ha podido conectar con el servidor');
+    }
   }
 
   return (
@@ -97,6 +113,7 @@ function Perfil() {
             </div>
 
             {message && <small className="success-message">{message}</small>}
+            {error && <small className="error-message">{error}</small>}
 
             <button type="submit" className="btn-primary">
               Guardar cambios
